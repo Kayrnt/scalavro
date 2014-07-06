@@ -1,9 +1,8 @@
 package com.gensler.scalavro.types.complex
 
-import com.gensler.scalavro.types.{ AvroType, AvroNamedType, SelfDescribingSchemaHelpers }
-import com.gensler.scalavro.{ Reference, JsonSchemifiable, CanonicalForm }
 import com.gensler.scalavro.JsonSchemaProtocol._
-
+import com.gensler.scalavro.types.{ AvroNamedType, AvroType, SelfDescribingSchemaHelpers }
+import com.gensler.scalavro.{ CanonicalForm, JsonSchemifiable }
 import spray.json._
 
 import scala.collection.immutable.ListMap
@@ -20,8 +19,6 @@ class AvroRecord[T: TypeTag](
     val aliases: Seq[String] = Seq(),
     val namespace: Option[String] = None,
     val doc: Option[String] = None) extends AvroNamedType[T] {
-
-  import AvroRecord._
 
   val typeName = "record"
 
@@ -57,6 +54,7 @@ class AvroRecord[T: TypeTag](
 object AvroRecord {
 
   import com.gensler.scalavro.util.ReflectionHelpers
+
   import scala.reflect.runtime.universe._
 
   private[types] def fromType[T <: Product: TypeTag](processedTypes: Set[Type]) = {
@@ -137,13 +135,27 @@ object AvroRecord {
       resolvedSymbols: mutable.Set[String] = mutable.Set[String]()): JsValue = {
       val requiredParams = ListMap(
         "name" -> name.toJson,
-        "type" -> selfContainedSchemaOrFullyQualifiedName(fieldType, resolvedSymbols)
+        "type" -> flattenedTypes(selfContainedSchemaOrFullyQualifiedName(fieldType, resolvedSymbols))
       )
       new JsObject(requiredParams ++ optionalParams)
     }
 
     final def parsingCanonicalForm(): JsValue =
       schemaToParsingCanonicalForm(this.schema)
+
+    def flattenedTypes(types: JsValue): JsValue = {
+      def flattenedTypesRec(types: JsArray): JsArray = {
+        JsArray(types.elements.flatMap {
+          case array: JsArray => flattenedTypesRec(array).elements
+          case js: JsValue    => Seq(js)
+        }.distinct)
+      }
+
+      types match {
+        case array: JsArray => flattenedTypesRec(array)
+        case x: JsValue     => x
+      }
+    }
 
   }
 
